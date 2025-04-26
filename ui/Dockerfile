@@ -1,23 +1,69 @@
-# syntax=docker.io/docker/dockerfile:1.7-labs
-FROM node:18
+##############################################
+## Build Stage
+##############################################
+FROM node:23-alpine AS builder
 
+# Temp for Docker Compose
 ARG PROXY_HOST=server
-WORKDIR /ui
 
-COPY package.json yarn.lock ./
+ENV PROXY_HOST=${PROXY_HOST}
 
-# TODO: configure this directly from the ui app
-# Work around to set the proxy host; required for running locally with docker-compose
-RUN <<EOF
-set -ex
-apt-get update
-apt-get install -y jq
-jq --arg proxy "http://$PROXY_HOST:8080" '.proxy = $proxy' package.json > temp.json
-mv temp.json package.json
-yarn install
-apt-get clean
-EOF
+RUN apk --no-cache add \
+    sed 
+#     bash \
+#     g++ \
+#     ca-certificates \
+#     lz4-dev \
+#     musl-dev \
+#     cyrus-sasl-dev \
+#     openssl-dev \
+#     make \
+#     git
 
-COPY --exclude=package.json --exclude=yarn.lock . ./
+# RUN apk add --no-cache --virtual .build-deps gcc zlib-dev libc-dev bsd-compat-headers bash
 
-CMD ["yarn", "start"]
+WORKDIR /usr/src/app
+
+# Copy package.json and lockfile to the working directory
+COPY ./package.json ./
+COPY ./yarn.lock ./
+
+# Install dependencies
+RUN yarn --frozen-lockfile
+
+# Copy the rest of our files
+COPY . .
+
+RUN sed -i 's/localhost:8080/'$PROXY_HOST'/g' ./package.json
+
+RUN yarn build
+
+##############################################
+## Deploy Stage - Local/Development 
+##############################################
+FROM node:23-alpine AS development
+
+WORKDIR /usr/src/app
+
+COPY --from=builder /usr/src/app/ .
+
+EXPOSE 3000
+
+CMD [ "yarn", "start" ]
+
+##############################################
+## Deploy Stage - Production 
+##############################################
+FROM nginx:1.28-alpine AS production
+
+# Copy the build folder from the previous stage with the bundled app
+COPY --from=builder /usr/src/app/build /usr/share/nginx/html
+
+# Copy gzip conf
+COPY ./nginx/gzip.conf /etc/nginx/conf.d/gzip.conf
+
+# Overwrite the default nginx site conf with ours
+COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# Expose port of our nginx server serving the built html/js files
+EXPOSE 3000
