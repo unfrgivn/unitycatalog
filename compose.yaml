@@ -1,7 +1,6 @@
 name: unitycatalog
 
 services:
-
   server:
     image: unitycatalog/unitycatalog:latest
     ports:
@@ -17,6 +16,9 @@ services:
     build:
       context: ui/
       dockerfile: Dockerfile
+      target: development
+      args:
+        - PROXY_HOST=server
     ports:
       - "3000:3000"
     depends_on:

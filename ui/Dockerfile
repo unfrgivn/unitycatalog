@@ -3,24 +3,13 @@
 ##############################################
 FROM node:23-alpine AS builder
 
-# Temp for Docker Compose
-ARG PROXY_HOST=server
-
+# PROXY_HOST is for backwards compatibility for older versions of Unitycatalog UI
+# Not used in production build
+ARG PROXY_HOST=localhost:8080
 ENV PROXY_HOST=${PROXY_HOST}
 
 RUN apk --no-cache add \
     sed 
-#     bash \
-#     g++ \
-#     ca-certificates \
-#     lz4-dev \
-#     musl-dev \
-#     cyrus-sasl-dev \
-#     openssl-dev \
-#     make \
-#     git
-
-# RUN apk add --no-cache --virtual .build-deps gcc zlib-dev libc-dev bsd-compat-headers bash
 
 WORKDIR /usr/src/app
 
@@ -34,6 +23,7 @@ RUN yarn --frozen-lockfile
 # Copy the rest of our files
 COPY . .
 
+# Backwards compatibility for older versions of Unitycatalog UI
 RUN sed -i 's/localhost:8080/'$PROXY_HOST'/g' ./package.json
 
 RUN yarn build
